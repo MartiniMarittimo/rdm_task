@@ -33,11 +33,10 @@ def loss_mse(output, target, mask):
     return loss
 
 
-
+"""
 def train(net, input, n_epochs, lr=1e-2, batch_size=32, plot_learning_curve=False, plot_gradient=False,
           mask_gradients=False, clip_gradient=None, keep_best=False, cuda=False, resample=False, lambda1=None, lambda2=None,
           save_loss=False):
-    """
     Train a network
     :param net: nn.Module
     :param input: torch tensor of shape (num_trials, num_timesteps, input_dim)
@@ -53,7 +52,6 @@ def train(net, input, n_epochs, lr=1e-2, batch_size=32, plot_learning_curve=Fals
         network has to implement a method clone())
     :param resample: for SupportLowRankRNNs, set True
     :return: nothing
-    """
     
     optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     
@@ -165,7 +163,7 @@ def train(net, input, n_epochs, lr=1e-2, batch_size=32, plot_learning_curve=Fals
 
     if keep_best:
         net.load_state_dict(best.state_dict())
-
+"""
 
         
 class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the parent class
@@ -302,7 +300,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
             trajectories = h
             return output, trajectories
 
-        else return_dynamics:
+        else:
             return output
         
 

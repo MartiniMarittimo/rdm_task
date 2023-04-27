@@ -23,7 +23,7 @@ class RandomDotMotion(ngym.TrialEnv):
         if rewards:
             self.rewards.update(rewards)
             
-        self.abort = False
+        #self.abort = False
         
         #self.SCALE = 3.2
         
@@ -82,39 +82,31 @@ class RandomDotMotion(ngym.TrialEnv):
             a boolean variable indicating whether the experiment has end, done
             a dictionary with extra information:
                 ground truth correct response, info['gt']
-                boolean indicating the end of the trial, info['next_step']
+                boolean indicating the end of the trial, info['new_trial']
         """
-        next_step = False
+        new_trial = False
+        
         reward = 0
         gt = self.gt_now #ground_truth
         
-        # observations
         if self.in_period('fixation'):
             if action != 0:  # action = 0 means fixating
-                next_step = self.abort
+                new_trial = False
                 reward += self.rewards['abort']
+                
         elif self.in_period('decision'):
             if action != 0:
-                next_step = True
+                new_trial = True
                 if action == gt:
                     reward += self.rewards['correct']
                     self.performance = 1
                 else:
                     reward += self.rewards['fail']
 
-        return self.ob_now, reward, False, {'next_step': next_step, 'gt': gt}
+        return self.ob_now, reward, False, {'new_trial': new_trial, 'gt': gt}
         
         
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+   
         
         
         
@@ -134,11 +126,11 @@ class RandomDotMotion(ngym.TrialEnv):
         
         
 
-
+"""
 def setup():
     """
-    Redefine global variables for the stimuli
-    """
+    #Redefine global variables for the stimuli
+"""
     global fixation_discrete, stimulus_discrete, decision_discrete
     #global index_response
     
@@ -209,8 +201,4 @@ def generate_rdm_data(num_trials, coherences=None, std=3e-2, fraction_validation
     values_train, values_valid = values[:split_at], values[split_at:]
 
     return inputs_train, targets_train, mask_train, inputs_val, targets_val, mask_val, values_train, values_valid
-
-
-
-
-
+"""

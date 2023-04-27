@@ -40,25 +40,23 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
         if timing:
             self.timing.update(timing)
 
-        self.abort = False #?
+        self.abort = False
 
-####################################################################################
         self.theta = np.linspace(0, 2*np.pi, dim_ring+1)[:-1]
         self.choices = np.arange(dim_ring)
 
         name = {'fixation': 0, 'stimulus': range(1, dim_ring+1)}
-        self.observation_space = spaces.Box(
-            -np.inf, np.inf, shape=(1+dim_ring,), dtype=np.float32, name=name)
+        self.observation_space = spaces.Box(-np.inf, np.inf, shape=(1+dim_ring,), dtype=np.float32, name=name)
         name = {'fixation': 0, 'choice': range(1, dim_ring+1)}
         self.action_space = spaces.Discrete(1+dim_ring, name=name)
-####################################################################################
 
     def _new_trial(self, **kwargs):
         """
         new_trial() is called when a trial ends to generate the next trial.
         The following variables are created:
-            durations, which stores the duration of the different periods (in the case of perceptualDecisionMaking: 
-            fixation, stimulus and decision periods)
+            durations, which stores the duration of the different periods (in
+            the case of perceptualDecisionMaking: fixation, stimulus and
+            decision periods)
             ground truth: correct response for the trial
             coh: stimulus coherence (evidence) for the trial
             obs: observation
@@ -66,7 +64,7 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
         # Trial info
         trial = {
             'ground_truth': self.rng.choice(self.choices),
-            'coh': self.rng.choice(self.cohs),  #self.rng = np.random.RandomState()
+            'coh': self.rng.choice(self.cohs),
         }
         trial.update(kwargs)
 
@@ -88,7 +86,6 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
 
         return trial
 
-    
     def _step(self, action):
         """
         _step receives an action and returns:
@@ -100,14 +97,15 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
                 boolean indicating the end of the trial, info['new_trial']
         """
         new_trial = False
+
         reward = 0
-        gt = self.gt_now #ground_truth
-        
-        # observations
+        gt = self.gt_now
+
         if self.in_period('fixation'):
             if action != 0:  # action = 0 means fixating
                 new_trial = self.abort
                 reward += self.rewards['abort']
+                
         elif self.in_period('decision'):
             if action != 0:
                 new_trial = True
