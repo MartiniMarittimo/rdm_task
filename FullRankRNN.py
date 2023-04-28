@@ -276,6 +276,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         h = self.h0 
         r = self.non_linearity(h)
         self.define_proxy_parameters()
+        input = torch.Tensor(input)
         
         #inizializzazione del rumore interno alla rete, gaussiana N(0,1)
         noise = torch.randn(self.hidden_size, device=self.wrec.device) 
@@ -288,13 +289,17 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         h = h + self.alpha * (- h + input.matmul(self.wi_full) + r.matmul(self.wrec.t())) + self.noise_std * noise 
         r = self.non_linearity(h)
         output = r.matmul(self.wo_full)
+        output = output.detach().numpy()
         
         #SOFTMAX
-        np.exp(output)
+        output = np.exp(output)
         denom = output.sum()
         for i in range(len(output)):
             num = output[i]
             output[i] = num / denom
+        
+        # TEST
+        output = np.array([0.8,0.1,0.1])
         
         if return_dynamics:
             trajectories = h
