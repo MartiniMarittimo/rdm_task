@@ -1,4 +1,8 @@
-class PerceptualDecisionMaking(ngym.TrialEnv):
+import numpy as np
+import neurogym as ngym
+from neurogym import spaces
+
+class RandomDotMotion(ngym.TrialEnv):
     """Two-alternative forced choice task in which the subject has to
     integrate two stimuli to decide which one is higher on average.
     A noisy stimulus is shown during the stimulus period. The strength (
@@ -18,7 +22,7 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
         'tags': ['perceptual', 'two-alternative', 'supervised']
     }
 
-    def __init__(self, dt=100, rewards=None, timing=None, cohs=None,
+    def __init__(self, dt=20, rewards=None, timing=None, cohs=None,
                  sigma=1.0, dim_ring=2):
         super().__init__(dt=dt)
         if cohs is None:
@@ -32,17 +36,20 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
         if rewards:
             self.rewards.update(rewards)
 
+        self.stimuli = np.arange(100, 1600, 100)
+        
         self.timing = {
-            'fixation': 100,
+            'fixation': 750,
             'stimulus': 2000,
             'delay': 0,
-            'decision': 100}
+            'decision': 500}
         if timing:
             self.timing.update(timing)
 
         self.abort = False
 
         self.theta = np.linspace(0, 2*np.pi, dim_ring+1)[:-1]
+        #print(self.theta)
         self.choices = np.arange(dim_ring)
 
         name = {'fixation': 0, 'stimulus': range(1, dim_ring+1)}
@@ -71,7 +78,11 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
         coh = trial['coh']
         ground_truth = trial['ground_truth']
         stim_theta = self.theta[ground_truth]
-
+        
+        stimulus_duration = int(self.rng.choice(self.stimuli))
+        substitution = {'stimulus': stimulus_duration}
+        self.timing.update(substitution)
+        
         # Periods
         self.add_period(['fixation', 'stimulus', 'delay', 'decision'])
 
@@ -79,7 +90,7 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
         self.add_ob(1, period=['fixation', 'stimulus', 'delay'], where='fixation')
         stim = np.cos(self.theta - stim_theta) * (coh/200) + 0.5
         self.add_ob(stim, 'stimulus', where='stimulus')
-        self.add_randn(0, self.sigma, 'stimulus', where='stimulus')
+        self.add_randn(0, self.sigma, period='stimulus', where='stimulus')
 
         # Ground truth
         self.set_groundtruth(ground_truth, period='decision', where='choice')
@@ -101,7 +112,7 @@ class PerceptualDecisionMaking(ngym.TrialEnv):
         reward = 0
         gt = self.gt_now
 
-        if self.in_period('fixation'):
+        if self.in_period('fixation') or self.in_period('stimulus'):
             if action != 0:  # action = 0 means fixating
                 new_trial = self.abort
                 reward += self.rewards['abort']

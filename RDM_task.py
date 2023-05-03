@@ -2,7 +2,7 @@ import numpy as np
 import neurogym as ngym
 from neurogym import spaces
 
-class PerceptualDecisionMaking(ngym.TrialEnv):
+class RandomDotMotion(ngym.TrialEnv):
     """Two-alternative forced choice task in which the subject has to
     integrate two stimuli to decide which one is higher on average.
     A noisy stimulus is shown during the stimulus period. The strength (
