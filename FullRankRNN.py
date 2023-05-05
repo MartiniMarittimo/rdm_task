@@ -7,32 +7,6 @@ import random
 import time
 
 
-
-def loss_mse(output, target, mask):
-    """
-    Mean squared error loss
-    :param output: torch tensor of shape (num_trials, num_timesteps, output_dim)
-    :param target: torch tensor of shape (num_trials, num_timesteps, output_dim)
-    :param mask: torch tensor of shape (num_trials, num_timesteps, 1)
-    :return: float
-    """
-    
-    # Compute loss for each trial & timestep (average accross output neurons)
-    loss_tensor = (mask * (target - output)).pow(2).mean(dim=-1)
-    #print("loss_tensor: ", loss_tensor.shape)
-
-    # Compute loss for each trial (average across timesteps)
-    # and account also for different number of masked values per trial
-    loss_by_trial = loss_tensor.sum(dim=-1) / mask[:, :, 0].sum(dim=-1)
-    #print("loss_by_trial: ", loss_by_trial.shape)
-    
-    #Compute the final loss (average across trials)
-    loss = loss_by_trial.mean()
-    #print("loss: ", loss.shape)
-    
-    return loss
-
-
 class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the parent class
 
     def __init__(self, input_size, hidden_size, output_size, noise_std, alpha=0.2, rho=1, train_wi=False, train_wrec=True,
@@ -68,6 +42,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         self.train_wo = train_wo #boolean (False)
         self.train_h0 = train_h0 #boolean (False)
         self.non_linearity = torch.nn.ReLU()
+        self.actor = False
 
         # torch.nn.Parameter(tensor) is a kind of Tensor that is to be considered a module parameter.
         # Parameters are Tensor subclasses, that have a very special property when used with Modules: 
@@ -124,12 +99,21 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         self.define_proxy_parameters()
     
         
+        
     def define_proxy_parameters(self):
         self.wi_full = (self.wi.t() * self.si).t()
         self.wo_full = self.wo * self.so
+    
+    
+    
+    def actor_critic(self, actor=False):
         
-
-    def forward(self, input, return_dynamics=False):       
+        if actor:
+            self.actor = True
+        
+        
+        
+    def forward(self, input, return_dynamics=False, actor=False):       
         """
         :param input: tensor of shape (batch_size, #timesteps, input_dimension)
         IMPORTANT --> the 3 dimensions need to be present, even if they are of size 1.
@@ -138,8 +122,6 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
                  if return_dynamics=True, output tensor & trajectories tensor of shape(batch_size, #timesteps, #hidden_units)
         """
         
-        #batch_size = input.shape[0]
-        #seq_len = input.shape[1]
         h = self.h0 
         r = self.non_linearity(h)
         self.define_proxy_parameters()
@@ -157,10 +139,11 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         r = self.non_linearity(h)
         output = r.matmul(self.wo_full)
         
-        #SOFTMAX
-        output = torch.exp(output)
-        denom = output.clone().sum()
-        output = output / denom
+        if self.actor:
+            #SOFTMAX
+            output = torch.exp(output)
+            denom = output.sum()
+            output = output / denom
 
         
         # TEST
@@ -172,12 +155,3 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
 
         else:
             return output
-        
-
-    #def clone(self):
-    #    new_net = FullRankRNN(self.input_size, self.hidden_size, self.output_size, self.noise_std, self.alpha,
-    #                          self.rho, self.train_wi, self.train_wrec, self.train_wo, self.train_h0,
-    #                          self.wi, self.wrec, self.wo, self.si, self.so)
-    #    return new_net
-
-
