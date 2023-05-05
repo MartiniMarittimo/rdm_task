@@ -33,139 +33,6 @@ def loss_mse(output, target, mask):
     return loss
 
 
-"""
-def train(net, input, n_epochs, lr=1e-2, batch_size=32, plot_learning_curve=False, plot_gradient=False,
-          mask_gradients=False, clip_gradient=None, keep_best=False, cuda=False, resample=False, lambda1=None, lambda2=None,
-          save_loss=False):
-    Train a network
-    :param net: nn.Module
-    :param input: torch tensor of shape (num_trials, num_timesteps, input_dim)
-    :param target: torch tensor of shape (num_trials, num_timesteps, output_dim)
-    :param mask: torch tensor of shape (num_trials, num_timesteps, 1)
-    :param n_epochs: int
-    :param lr: float, learning rate
-    :param batch_size: int
-    :param plot_learning_curve: bool
-    :param plot_gradient: bool
-    :param clip_gradient: None or float, if not None the value at which gradient norm is clipped
-    :param keep_best: bool, if True, model with lower loss from training process will be kept (for this option, the
-        network has to implement a method clone())
-    :param resample: for SupportLowRankRNNs, set True
-    :return: nothing
-    
-    optimizer = torch.optim.Adam(net.parameters(), lr=lr)
-    
-    ##### CUDA management #####
-    if cuda:
-        if not torch.cuda.is_available():
-            print("Warning: CUDA not available on this machine, switching to CPU")
-            device = torch.device('cpu')
-        else:
-            device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
-        
-    net.to(device=device)
-    input = input.to(device=device)
-    target = target.to(device=device)
-    mask = mask.to(device=device)
-    ######
-    
-    num_samples = input.shape[0] # NUMBER of trials, NUMERO totale di campionamenti i (samples) nel dataset D
-    all_losses = []
-    mean_losses = []
-    if plot_gradient:
-        gradient_norms = []
-        
-    with torch.no_grad():
-        output = net(input)  # forward (in this first case using to the whole input dataset)
-        initial_loss = loss_mse(output, target, mask)
-        #tensor.item() returns the value of this tensor as a standard Python number; it only works for tensors with one element
-        mean_losses.append(initial_loss.item()) 
-        print("Initial loss: %.3f." % (initial_loss.item()))
-        begin = time.time()
-        if keep_best:
-            best = net.clone()
-            best_loss = initial_loss.item()
-
-    for epoch in range(n_epochs):
-        losses = []
-        
-        for mb in range(num_samples // batch_size): # mb numera i mini-batch --> in un'epoca ciclo su tutti i mini-batch
-            optimizer.zero_grad()
-            random_batch_idx = random.sample(range(num_samples), batch_size)
-            batch = input[random_batch_idx]
-            if lambda1 is not None:
-                output = net(batch) # forward 
-                loss = loss_mse(output, target[random_batch_idx], mask[random_batch_idx]) + \
-                lambda1*torch.sum(torch.abs(net.wrec))/net.wrec.shape[0]**2
-            elif lambda2 is not None:
-                output, h = net.forward(batch,return_dynamics = True) # forward
-                r = net.non_linearity(h)
-                mean_abs_rate = torch.sum(r)/r.shape[0]/r.shape[1]/r.shape[2]
-                loss = loss_mse(output, target[random_batch_idx], mask[random_batch_idx]) + \
-                lambda2*mean_abs_rate
-            else:
-                output = net(batch) # forward
-                loss = loss_mse(output, target[random_batch_idx], mask[random_batch_idx]) 
-            
-            losses.append(loss.item())
-            all_losses.append(loss.item())
-            
-            # qui sto calcolando i gradienti quindi dL/dw_previous, con L funzione di costo: 
-            # ho un aggiornamento per ogni mini-batch, per ogni epoca
-            loss.backward() 
-            
-            if clip_gradient is not None:
-                torch.nn.utils.clip_grad_norm_(net.parameters(), clip_gradient)
-            
-            if plot_gradient:
-                tot = 0
-                for param in [p for p in net.parameters() if p.requires_grad]:
-                    tot += (param.grad ** 2).sum()
-                gradient_norms.append(sqrt(tot))
-            
-            # qui invece sto facendo l'update dei parametri, con i gradienti calcolati precedentemente:
-            # ho un aggiornamento per ogni mini-batch, per ogni epoca
-            optimizer.step()
-            
-            # Two important lines to prevent memory leaks
-            loss.detach_()
-            output.detach_()
-            if resample:
-                net.resample_basis()
-        
-        if keep_best and np.mean(losses) < best_loss:
-            best = net.clone()
-            best_loss = np.mean(losses)
-            #print("epoch %d:  loss=%.3f  (took %.2f s) *" % (epoch, np.mean(losses), time.time() - begin))
-        #else:
-            #print("epoch %d:  loss=%.3f  (took %.2f s)" % (epoch, np.mean(losses), time.time() - begin))
-        
-        if save_loss is not None:
-            mean_losses.append(np.mean(losses))
-
-    print("Final loss: %.3f. It took %.2f s for %d epochs.\n" % (np.mean(losses), time.time() - begin, n_epochs))
-
-    if save_loss is not None:
-        #torch.save(all_losses,'../models/all_'+save_loss+'.pt')
-        torch.save(mean_losses,'../models/'+save_loss+'.pt')
-
-    if plot_learning_curve:
-        plt.plot(all_losses)
-        plt.title("Learning curve")
-        plt.show()
-
-    if plot_gradient:
-        plt.plot(gradient_norms)
-        plt.title("Gradient norm")
-        plt.show()
-
-    if keep_best:
-        net.load_state_dict(best.state_dict())
-"""
-
-        
 class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the parent class
 
     def __init__(self, input_size, hidden_size, output_size, noise_std, alpha=0.2, rho=1, train_wi=False, train_wrec=True,
@@ -289,17 +156,15 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         h = h + self.alpha * (- h + input.matmul(self.wi_full) + r.matmul(self.wrec.t())) + self.noise_std * noise 
         r = self.non_linearity(h)
         output = r.matmul(self.wo_full)
-        output = output.detach().numpy()
         
         #SOFTMAX
-        output = np.exp(output)
-        denom = output.sum()
-        for i in range(len(output)):
-            num = output[i]
-            output[i] = num / denom
+        output = torch.exp(output)
+        denom = output.clone().sum()
+        output = output / denom
+
         
         # TEST
-        output = np.array([0.8,0.1,0.1])
+        #output = torch.Tensor([0.8,0.1,0.1])
         
         if return_dynamics:
             trajectories = r

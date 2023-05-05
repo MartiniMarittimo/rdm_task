@@ -31,7 +31,9 @@ class REINFORCE:
         observations = []
         actions = []
         rewards = []
-        probs = []
+        probs = torch.unsqueeze(torch.zeros(3), 0)
+        log_probs = torch.unsqueeze(torch.zeros(3), 0)
+        full_mask = torch.unsqueeze(torch.zeros(3), 0)
         values = []
         gt = []
         n_trs = n_trs
@@ -43,66 +45,119 @@ class REINFORCE:
         action = 0
 
         while trial_index < n_trs:           
+            
             ob, reward, done, info = self.task.step(action=action)
+            observations.append(ob)
+            rewards.append(reward)
+
+            ob = torch.Tensor(np.array([ob]))
+            ob = torch.unsqueeze(ob, 0)
             
             #name_load = 'FullRankRNN'
             #self.actor_network.load_state_dict(torch.load("../code_eLIFE/models/"+name_load+".pt", map_location='cpu'))
-
+                        
             action_probs, trajs = self.actor_network(ob, return_dynamics=True)
-            action = np.random.choice(np.arange(len(action_probs)), p=action_probs) # 0, 1, 2: fix, right, left
+            #print("hey", action_probs)
+            
+            p = action_probs[0][0].clone().detach().numpy()
+            #print(p)
+            action = np.random.choice(np.arange(len(p)), p=p) # 0, 1, 2: fix, right, left
+            mask = torch.zeros(len(p))
+            mask[action] = 1
+            full_mask = torch.cat((full_mask, torch.unsqueeze(mask, 0)))
             actions.append(action)
-            probs.append(action_probs[action])
-            observations.append(ob)
-            rewards.append(reward)
+            log_prob = torch.log(action_probs.clone())
+            probs = torch.cat((probs, torch.unsqueeze(action_probs[0][0], 0)))
+            log_probs = torch.cat((log_probs, torch.unsqueeze(log_prob[0][0], 0)))
             
             action = torch.Tensor([action])
-            value = self.critic_network(torch.cat((action, trajs))) #QUESTO OUTPUT È SBAGLIATISSIMO!! E NON CI VA SOFTMAX IQC!
+            value = 0
+            #value = self.critic_network(torch.cat((action, trajs))) #QUESTO OUTPUT È SBAGLIATISSIMO!! E NON CI VA SOFTMAX IQC!
             values.append(value)
             
             new_trial = info["new_trial"]
             if new_trial:
-                trial_index += 1
+                trial_index = trial_index + 1
                 store_trial_begin.append(time_step+1)
                 gt.append(info["gt"])
 
-            time_step += 1
-
-        #probs = torch.Tensor(probs)  
+            time_step = time_step + 1
         
-        return observations, rewards, actions, probs, values, store_trial_begin, gt
+        probs = probs[1:]
+        log_probs = log_probs[1:]
+        full_mask = full_mask[1:]
+        observations = np.asarray(observations)
+        return observations, rewards, actions, probs, log_probs, full_mask, values, store_trial_begin, gt
     
     
+   
+    def lossf(self, log_probs, full_mask):
+        
+        loss = (full_mask * log_probs)
+        
+        print("yulu",loss)
+        
+        loss = loss.sum(dim=-1).sum(dim=-1)
+        
+        print("huhu",loss)
+        
+        return loss
     
+    
+        
     def learning(self, n_trs, lr): 
         
         optimizer = torch.optim.Adam(self.actor_network.parameters(), lr=lr)
         
-        observations, rewards, actions, probs, values, store_trial_begin, gt = self.experience(n_trs)
-        log_probs = np.log(probs)
-
+        #with torch.no_grad():        
+        #    observations, rewards, actions, probs, log_probs, values, store_trial_begin, gt = self.experience(n_trs)
+        
         cum_rho = []
         tau_r = np.inf  # Song et al. set this to 10s only for reaction time tasks
         gradient_per_trial = 0
-        
+                
+        optimizer.zero_grad()
+        observations, rewards, actions, probs, log_probs, full_mask, values, store_trial_begin, gt = self.experience(n_trs)
+        print(log_probs)
+        loss = self.lossf(log_probs, full_mask)
+        loss.backward()
+        """
         for i in range(n_trs):
+            
             start = int(store_trial_begin[i])
             stop = int(store_trial_begin[i+1])
+            
             trial_rewards = np.array(rewards[start:stop])
+            trial_actions = actions[start:stop]
             trial_log_probs = log_probs[start:stop]
             trial_values = values[start:stop]
             cumulative_rewards = [] # np.zeros(len(trial_rewards))
-            #cumulative_reward = 0
 
+            print(trial_log_probs, "\n\n")
+            
             for j in range(len(trial_rewards)):
-                optimizer.zero_grad()
+                
+                mask = torch.zeros(len(probs[0]))
+                mask[trial_actions[j]] = 1
+                
+                loss = (mask * trial_log_probs[j]).sum()
+                
                 disc_rew = [r*np.exp(-(i_r+1)/tau_r) for i_r, r in enumerate(trial_rewards[j+1:])]
                 cumulative_rewards.append(np.sum(disc_rew))
-                gradient_per_trial += trial_log_probs[j].backward() * (np.sum(disc_rew) - trial_values[j])
-                optimizer.step()
+                
+                #print(trial_log_probs[j])
+                loss.backward()
+                #trial_log_probs[j].detach_()
+                #output.detach_()
+                print("done")
+                
+                #gradient_per_trial += trial_log_probs[j].backward() * (np.sum(disc_rew) - trial_values[j])
+                
             #cum_rho.append(cumulative_rewards)
             
         #gradient = gradient / n_trs
-        
+        """
+        optimizer.step()
 
     def train(self, num_trial, updating_rate, lr):
         
