@@ -48,7 +48,7 @@ class RandomDotMotion(ngym.TrialEnv):
 
         self.abort = False
 
-        self.theta = np.linspace(0, 2*np.pi, dim_ring+1)[:-1]
+        self.theta = np.linspace(0, 2*np.pi, dim_ring+1)[:-1] # 0 e PI-greco
         #print(self.theta)
         self.choices = np.arange(dim_ring)
 
@@ -70,14 +70,14 @@ class RandomDotMotion(ngym.TrialEnv):
         """
         # Trial info
         trial = {
-            'ground_truth': self.rng.choice(self.choices),
+            'ground_truth': self.rng.choice(self.choices), # 0 o 1
             'coh': self.rng.choice(self.cohs),
         }
         trial.update(kwargs)
 
         coh = trial['coh']
         ground_truth = trial['ground_truth']
-        stim_theta = self.theta[ground_truth]
+        stim_theta = self.theta[ground_truth] # 0 o PI-greco
         
         stimulus_duration = int(self.rng.choice(self.stimuli))
         substitution = {'stimulus': stimulus_duration}
@@ -88,7 +88,7 @@ class RandomDotMotion(ngym.TrialEnv):
 
         # Observations
         self.add_ob(1, period=['fixation', 'stimulus', 'delay'], where='fixation')
-        stim = np.cos(self.theta - stim_theta) * (coh/200) + 0.5
+        stim = np.cos(self.theta - stim_theta) * (coh/200) + 0.5 # cos(0 e PI) oppure cos(-PI e 0) -> (1 e -1) oppure (-1 e 1)
         self.add_ob(stim, 'stimulus', where='stimulus')
         self.add_randn(0, self.sigma, period='stimulus', where='stimulus')
 

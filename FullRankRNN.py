@@ -113,7 +113,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         
         
         
-    def forward(self, input, return_dynamics=False, actor=False):       
+    def forward(self, input, h0, return_dynamics=False, actor=False):       
         """
         :param input: tensor of shape (batch_size, #timesteps, input_dimension)
         IMPORTANT --> the 3 dimensions need to be present, even if they are of size 1.
@@ -122,7 +122,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
                  if return_dynamics=True, output tensor & trajectories tensor of shape(batch_size, #timesteps, #hidden_units)
         """
         
-        h = self.h0 
+        h = h0 
         r = self.non_linearity(h)
         self.define_proxy_parameters()
         input = torch.Tensor(input)
@@ -139,18 +139,26 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         r = self.non_linearity(h)
         output = r.matmul(self.wo_full)
         
-        if self.actor:
+        if self.actor and return_dynamics:            
             #SOFTMAX
-            output = torch.exp(output)
-            denom = output.sum()
-            output = output / denom
+            #print(output)
+            #print(output[0][0])
+            soft_output = output.clone()
+            for i in range(len(output[0][0])):
+                #print(output[0][0]-output[0][0][i])
+                exp_output = torch.exp(output[0][0]-output[0][0][i])
+                denom = exp_output.sum()
+                soft_output[0][0][i] = 1 / denom
+            
+            trajectories = h
+            return soft_output, trajectories, output, exp_output, denom
 
         
         # TEST
         #output = torch.Tensor([0.8,0.1,0.1])
         
         if return_dynamics:
-            trajectories = r
+            trajectories = h
             return output, trajectories
 
         else:

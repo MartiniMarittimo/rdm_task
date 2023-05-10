@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 import time
 
 import FullRankRNN as rnn
@@ -10,8 +11,9 @@ import RDM_task as rdm
 class REINFORCE:
     
     def __init__(self, input_size=3, hidden_size=128, output_size=3,
-                 deltaT=20., noise_std=0, alpha=0.1, lr=0.7):
+                 deltaT=20., noise_std=0, alpha=0.2):
 
+        self.hidden_size = hidden_size
         self.actor_network = rnn.FullRankRNN(input_size, hidden_size, output_size,
                                              noise_std=noise_std, alpha=alpha, rho=0.8,
                                              train_wi=True, train_wo=True)
@@ -40,7 +42,7 @@ class REINFORCE:
         loss = (new_mask * log_probs)
         loss = loss.sum(dim=-1)
         loss = loss * cum_rho        
-        loss = loss.sum(dim=-1) / n_trs
+        loss = loss.sum(dim=-1) / (-n_trs)
         
         return loss
     
@@ -76,6 +78,13 @@ class REINFORCE:
 
         self.task.reset()
         action = 0
+        h0_actor = torch.zeros(self.hidden_size)
+        h0_critic = torch.zeros(self.hidden_size)
+        
+        outputs = []
+        exp_outputs = []
+        denoms = []
+        ps = []
 
         while trial_index < n_trs:           
             
@@ -89,9 +98,17 @@ class REINFORCE:
             #name_load = 'FullRankRNN'
             #self.actor_network.load_state_dict(torch.load("../code_eLIFE/models/"+name_load+".pt", map_location='cpu'))
             
-            action_probs, trajs = self.actor_network(ob, return_dynamics=True) # action_probs: tensor of size (1,1,3)
+            action_probs, trajs, output, exp_output, denom = self.actor_network(ob, h0_actor, return_dynamics=True) #action_probs: tensor of size (1,1,3)
+            #outputs.append(output[0][0].clone().detach().numpy())
+            #exp_outputs.append(exp_output[0][0].clone().detach().numpy())
+            #denoms.append(denom.clone().detach().numpy())
             
             p = action_probs[0][0].clone().detach().numpy()
+           #print(p)
+           #print(exp_output)
+           #print(denom)
+           #print(self.actor_network.non_linearity(trajs).mean())
+            ps.append(p)
             action = np.random.choice(np.arange(len(p)), p=p) # 0, 1, 2: fix, right, left
             actions.append(action)
             action_log_probs = torch.log(action_probs)
@@ -99,21 +116,31 @@ class REINFORCE:
             log_probs = torch.cat((log_probs, torch.unsqueeze(action_log_probs[0][0], 0)))
             
             action = torch.Tensor([action])
-            value = self.critic_network(torch.cat((action, trajs[0][0])))
+            trajs_forrelu = self.critic_network.non_linearity(trajs[0][0])
+            value, trajs_critic = self.critic_network(torch.cat((action, trajs_forrelu.detach())), 
+                                                      h0_critic, return_dynamics=True)
             values = torch.cat((values, value))
-            
+            h0_actor = trajs  
+            h0_critic = trajs_critic
+
             if info["new_trial"]:
                 trial_index = trial_index + 1
                 trial_begins.append(time_step+1)
                 gt.append(info["gt"])
+                h0_actor = torch.zeros(self.hidden_size)
+                h0_critic = torch.zeros(self.hidden_size)
 
             time_step = time_step + 1
                 
         observations = np.asarray(observations)
         probs = probs[1:]
         log_probs = log_probs[1:]
-        
-        return observations, rewards, actions, probs, log_probs, values, trial_begins, gt
+        outputs = np.asarray(outputs)
+        exp_outputs = np.asarray(exp_outputs)
+        denoms = np.asarray(denoms)
+        ps = np.asarray(ps)
+        return observations, rewards, actions, probs, log_probs, values, trial_begins, gt, \
+    outputs.T, exp_outputs.T, denoms, ps.T
     
    
     
@@ -121,13 +148,16 @@ class REINFORCE:
         
         begin = time.time()
         
-        optimizer = torch.optim.Adam(self.actor_network.parameters(), lr=lr)
+        optimizer_actor = torch.optim.Adam(self.actor_network.parameters(), lr=lr)
+        optimizer_critic = torch.optim.Adam(self.critic_network.parameters(), lr=lr)
+
         
         #with torch.no_grad():        
         
-        optimizer.zero_grad()
+        optimizer_actor.zero_grad()
         
-        observations, rewards, actions, probs, log_probs, values, trial_begins, gt = self.experience(n_trs)
+        observations, rewards, actions, probs, log_probs, values, trial_begins, gt, \
+        outputs, exp_outputs, denoms, ps = self.experience(n_trs)
 
         cum_rho = np.zeros(0)
         tau_r = np.inf  # Song et al. set this to 10s only for reaction time tasks
@@ -150,17 +180,26 @@ class REINFORCE:
                     
         cum_rho = torch.Tensor(cum_rho)
         
+        #print(self.actor_network.wi.mean())
+        #print(self.actor_network.wo[:,0].abs().mean())
+        #print(self.actor_network.wo[:,1].abs().mean())
+        #print(self.actor_network.wo[:,2].abs().mean())
         loss = self.loss(log_probs, actions, cum_rho - values, n_trs)
         loss.backward(retain_graph=True)
-        optimizer.step()
+        optimizer_actor.step()
+        #print(self.actor_network.wi.mean())
+        #print(self.actor_network.wo[:,0].abs().mean())
+        #print(self.actor_network.wo[:,1].abs().mean())
+        #print(self.actor_network.wo[:,2].abs().mean())
 
-        optimizer.zero_grad()
+        optimizer_critic.zero_grad()
         loss_mse = self.loss_mse(values, cum_rho)
         loss_mse.backward()
-        optimizer.step()
+        optimizer_critic.step()
         
         print("It took %fs for %i trials" %(time.time()-begin, n_trs))
     
+        return outputs, exp_outputs, denoms, trial_begins, ps
     
     
     def train(self, num_trial, updating_rate, lr):
