@@ -9,8 +9,9 @@ import time
 
 class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the parent class
 
-    def __init__(self, input_size, hidden_size, output_size, noise_std, alpha=0.2, rho=1, train_wi=False, train_wrec=True,
-                 train_wo=False, train_h0=False, wi_init=None, wrec_init=None, wo_init=None, si_init=None, so_init=None):
+    def __init__(self, input_size, hidden_size, output_size, noise_std, alpha=0.2, rho=1, 
+                 train_wi=False, train_wrec=True, train_wo=False, train_h0=False, 
+                 wi_init=None, wrec_init=None, wo_init=None, si_init=None, so_init=None):
         """
         :param input_size: int
         :param hidden_size: int
@@ -44,15 +45,8 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         self.non_linearity = torch.nn.ReLU()
         self.actor = False
 
-        # torch.nn.Parameter(tensor) is a kind of Tensor that is to be considered a module parameter.
-        # Parameters are Tensor subclasses, that have a very special property when used with Modules: 
-        # when they’re assigned as Module attributes, they are automatically added to the list of its parameters, 
-        # and will appear e.g. in parameters() iterator. Assigning a Tensor doesn’t have such effect. 
-        # Parameter has a method called requires_grad which is a boolean value and assesses whether the parameter requires 
-        # gradient or not. It is optional and its default value is True.
-
-        self.wi = nn.Parameter(torch.Tensor(input_size, hidden_size)) #matrice 2D
-        self.si = nn.Parameter(torch.Tensor(input_size)) #vettore 1D
+        self.wi = nn.Parameter(torch.Tensor(input_size, hidden_size)) #tensore 2D
+        self.si = nn.Parameter(torch.Tensor(input_size)) #tensore 1D
         if train_wi:
             self.si.requires_grad = False 
         if not train_wi:
@@ -113,7 +107,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         
         
         
-    def forward(self, input, h0, return_dynamics=False, actor=False):       
+    def forward(self, input, return_dynamics=False, h0=None):       
         """
         :param input: tensor of shape (batch_size, #timesteps, input_dimension)
         IMPORTANT --> the 3 dimensions need to be present, even if they are of size 1.
@@ -122,44 +116,44 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
                  if return_dynamics=True, output tensor & trajectories tensor of shape(batch_size, #timesteps, #hidden_units)
         """
         
-        h = h0 
+        batch_size = input.shape[0]
+        seq_len = input.shape[1]
+        if h0 is None:
+            h = self.h0
+        else:
+            h = h0 
         r = self.non_linearity(h)
         self.define_proxy_parameters()
-        input = torch.Tensor(input)
-        
-        #inizializzazione del rumore interno alla rete, gaussiana N(0,1)
-        noise = torch.randn(self.hidden_size, device=self.wrec.device) 
-        output = torch.zeros(self.output_size, device=self.wrec.device)
-        
+        noise = torch.randn(batch_size, seq_len, self.hidden_size, device=self.wrec.device) 
+        output = torch.zeros(batch_size, seq_len, self.output_size, device=self.wrec.device)
         if return_dynamics:
-            trajectories = torch.zeros(self.hidden_size, device=self.wrec.device)
-
-        # forward loop: it's a way to integrate in time
-        h = h + self.alpha * (- h + input.matmul(self.wi_full) + r.matmul(self.wrec.t())) + self.noise_std * noise 
-        r = self.non_linearity(h)
-        output = r.matmul(self.wo_full)
-        
-        if self.actor and return_dynamics:            
-            #SOFTMAX
-            #print(output)
-            #print(output[0][0])
-            soft_output = output.clone()
-            for i in range(len(output[0][0])):
-                #print(output[0][0]-output[0][0][i])
-                exp_output = torch.exp(output[0][0]-output[0][0][i])
-                denom = exp_output.sum()
-                soft_output[0][0][i] = 1 / denom
+            trajectories = torch.zeros(batch_size, seq_len, self.hidden_size, device=self.wrec.device)
             
-            trajectories = h
-            return soft_output, trajectories, output, exp_output, denom
-
+        # forward loop
+        for i in range(seq_len):
+            h = h + self.alpha * (- h + input[:, i, :].matmul(self.wi_full) + r.matmul(self.wrec.t())) + \
+            self.noise_std * noise[:, i, :]
+            r = self.non_linearity(h)
+            output[:, i, :] = r.matmul(self.wo_full)
+            if return_dynamics:
+                trajectories[:, i, :] = h
         
-        # TEST
-        #output = torch.Tensor([0.8,0.1,0.1])
-        
-        if return_dynamics:
-            trajectories = h
-            return output, trajectories
+        if self.actor:            
+            
+            #SOFTMAX
+            exp_output = torch.exp(output.clone())
+            denom = exp_output.sum(dim=-1)
+            soft_output = exp_output.clone()
+            for i in range(self.output_size):
+                 soft_output[:,:,i] /= denom
 
+            if return_dynamics:
+                return soft_output, trajectories
+            else:
+                return soft_output
+        
         else:
-            return output
+            if return_dynamics:
+                return output, trajectories
+            else:
+                return output

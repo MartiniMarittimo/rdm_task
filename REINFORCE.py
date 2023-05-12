@@ -14,13 +14,13 @@ class REINFORCE:
                  deltaT=20., noise_std=0, alpha=0.2):
 
         self.hidden_size = hidden_size
+        
         self.actor_network = rnn.FullRankRNN(input_size, hidden_size, output_size,
                                              noise_std=noise_std, alpha=alpha, rho=0.8,
                                              train_wi=True, train_wo=True)
         
         self.actor_network.actor_critic(actor=True)
         
-        # TODO: should output a continuous value
         self.critic_network = rnn.FullRankRNN(input_size=hidden_size+1, hidden_size=hidden_size, output_size=1,
                                               noise_std=noise_std, alpha=alpha, rho=0.8,
                                               train_wi=True, train_wo=True)
@@ -56,7 +56,7 @@ class REINFORCE:
 
       
 
-    def experience(self, n_trs):
+    def experience(self, n_trs, name_load=None):
         
         begin = time.time()
 
@@ -66,6 +66,7 @@ class REINFORCE:
         probs = torch.unsqueeze(torch.zeros(3), 0)
         actions = []
         log_probs = torch.unsqueeze(torch.zeros(3), 0)
+        print(log_probs,"log")
         
         values = torch.zeros(0) # TODO: da aggiustare assieme al resto
         
@@ -78,13 +79,9 @@ class REINFORCE:
 
         self.task.reset()
         action = 0
+        
         h0_actor = torch.zeros(self.hidden_size)
         h0_critic = torch.zeros(self.hidden_size)
-        
-        outputs = []
-        exp_outputs = []
-        denoms = []
-        ps = []
 
         while trial_index < n_trs:           
             
@@ -95,20 +92,14 @@ class REINFORCE:
             ob = torch.Tensor(np.array([ob]))
             ob = torch.unsqueeze(ob, 0) # tensor of size (1,1,3)
 
-            #name_load = 'FullRankRNN'
-            #self.actor_network.load_state_dict(torch.load("../code_eLIFE/models/"+name_load+".pt", map_location='cpu'))
-            
-            action_probs, trajs, output, exp_output, denom = self.actor_network(ob, h0_actor, return_dynamics=True) #action_probs: tensor of size (1,1,3)
-            #outputs.append(output[0][0].clone().detach().numpy())
-            #exp_outputs.append(exp_output[0][0].clone().detach().numpy())
-            #denoms.append(denom.clone().detach().numpy())
+            if name_load is not None:
+                self.actor_network.load_state_dict(torch.load(name_load+".pt", map_location='cpu'))
+                action_probs, trajs = self.actor_network(ob, return_dynamics=True, h0=h0_actor) #action_probs: tensor of size (1,1,3)
+
+            else:
+                action_probs, trajs = self.actor_network(ob, return_dynamics=True, h0=h0_actor) #action_probs: tensor of size (1,1,3)
             
             p = action_probs[0][0].clone().detach().numpy()
-           #print(p)
-           #print(exp_output)
-           #print(denom)
-           #print(self.actor_network.non_linearity(trajs).mean())
-            ps.append(p)
             action = np.random.choice(np.arange(len(p)), p=p) # 0, 1, 2: fix, right, left
             actions.append(action)
             action_log_probs = torch.log(action_probs)
@@ -117,9 +108,10 @@ class REINFORCE:
             
             action = torch.Tensor([action])
             trajs_forrelu = self.critic_network.non_linearity(trajs[0][0])
-            value, trajs_critic = self.critic_network(torch.cat((action, trajs_forrelu.detach())), 
-                                                      h0_critic, return_dynamics=True)
-            values = torch.cat((values, value))
+           # print(torch.unsqueeze(torch.cat((action, trajs_forrelu.detach())),0).size(), "here")
+            cose = torch.unsqueeze(torch.unsqueeze(torch.cat((action, trajs_forrelu.detach())),0),0)
+            value, trajs_critic = self.critic_network(cose, return_dynamics=True, h0=h0_critic)
+            values = torch.cat((values, value[0][0]))  
             h0_actor = trajs  
             h0_critic = trajs_critic
 
@@ -135,13 +127,9 @@ class REINFORCE:
         observations = np.asarray(observations)
         probs = probs[1:]
         log_probs = log_probs[1:]
-        outputs = np.asarray(outputs)
-        exp_outputs = np.asarray(exp_outputs)
-        denoms = np.asarray(denoms)
-        ps = np.asarray(ps)
-        return observations, rewards, actions, probs, log_probs, values, trial_begins, gt, \
-    outputs.T, exp_outputs.T, denoms, ps.T
-    
+      
+        return observations, rewards, actions, probs, log_probs, values, trial_begins, gt
+   
    
     
     def learning(self, n_trs, lr): 
@@ -151,16 +139,14 @@ class REINFORCE:
         optimizer_actor = torch.optim.Adam(self.actor_network.parameters(), lr=lr)
         optimizer_critic = torch.optim.Adam(self.critic_network.parameters(), lr=lr)
 
-        
         #with torch.no_grad():        
         
         optimizer_actor.zero_grad()
         
-        observations, rewards, actions, probs, log_probs, values, trial_begins, gt, \
-        outputs, exp_outputs, denoms, ps = self.experience(n_trs)
+        observations, rewards, actions, probs, log_probs, values, trial_begins, gt = self.experience(n_trs)
 
         cum_rho = np.zeros(0)
-        tau_r = np.inf  # Song et al. set this to 10s only for reaction time tasks
+        tau_r = np.inf  # Song et al. set this value to 10s only for reaction time tasks
                 
         for i in range(n_trs):
             
@@ -180,18 +166,10 @@ class REINFORCE:
                     
         cum_rho = torch.Tensor(cum_rho)
         
-        #print(self.actor_network.wi.mean())
-        #print(self.actor_network.wo[:,0].abs().mean())
-        #print(self.actor_network.wo[:,1].abs().mean())
-        #print(self.actor_network.wo[:,2].abs().mean())
         loss = self.loss(log_probs, actions, cum_rho - values, n_trs)
         loss.backward(retain_graph=True)
         optimizer_actor.step()
-        #print(self.actor_network.wi.mean())
-        #print(self.actor_network.wo[:,0].abs().mean())
-        #print(self.actor_network.wo[:,1].abs().mean())
-        #print(self.actor_network.wo[:,2].abs().mean())
-
+    
         optimizer_critic.zero_grad()
         loss_mse = self.loss_mse(values, cum_rho)
         loss_mse.backward()
@@ -199,7 +177,6 @@ class REINFORCE:
         
         print("It took %fs for %i trials" %(time.time()-begin, n_trs))
     
-        return outputs, exp_outputs, denoms, trial_begins, ps
     
     
     def train(self, num_trial, updating_rate, lr):
