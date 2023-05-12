@@ -66,7 +66,6 @@ class REINFORCE:
         probs = torch.unsqueeze(torch.zeros(3), 0)
         actions = []
         log_probs = torch.unsqueeze(torch.zeros(3), 0)
-        print(log_probs,"log")
         
         values = torch.zeros(0) # TODO: da aggiustare assieme al resto
         
@@ -142,6 +141,7 @@ class REINFORCE:
         #with torch.no_grad():        
         
         optimizer_actor.zero_grad()
+        optimizer_critic.zero_grad()
         
         observations, rewards, actions, probs, log_probs, values, trial_begins, gt = self.experience(n_trs)
 
@@ -170,7 +170,6 @@ class REINFORCE:
         loss.backward(retain_graph=True)
         optimizer_actor.step()
     
-        optimizer_critic.zero_grad()
         loss_mse = self.loss_mse(values, cum_rho)
         loss_mse.backward()
         optimizer_critic.step()
@@ -184,6 +183,6 @@ class REINFORCE:
         n_trs = int(num_trial * updating_rate)
         train_iterations = 1 / updating_rate
 
-        for i in range(train_iterations):
+        for i in range(iterations):
             observations, policies, actions, rewards = self.experience(n_trs, kwarg)
             learning(self, n_trs, policies, rewards, lr)
