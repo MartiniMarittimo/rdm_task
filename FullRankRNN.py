@@ -142,10 +142,10 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
             
             #SOFTMAX
             exp_output = torch.exp(output.clone())
-            denom = exp_output.sum(dim=-1)
+            denom = exp_output.clone().sum(dim=-1)
             soft_output = exp_output.clone()
             for i in range(self.output_size):
-                 soft_output[:,:,i] /= denom
+                 soft_output[:,:,i] = exp_output[:,:,i] / denom
 
             if return_dynamics:
                 return soft_output, trajectories

@@ -4,7 +4,7 @@ import torch.nn as nn
 import time
 
 import FullRankRNN as rnn
-import RDM_task as rdm
+import RDMtask as rdm
 
 
 
@@ -58,6 +58,9 @@ class REINFORCE:
 
     def experience(self, n_trs, name_load=None):
         
+        if name_load is not None:
+            self.actor_network.load_state_dict(torch.load(name_load, map_location='cpu'))
+        
         begin = time.time()
 
         observations = []
@@ -90,13 +93,8 @@ class REINFORCE:
 
             ob = torch.Tensor(np.array([ob]))
             ob = torch.unsqueeze(ob, 0) # tensor of size (1,1,3)
-
-            if name_load is not None:
-                self.actor_network.load_state_dict(torch.load(name_load+".pt", map_location='cpu'))
-                action_probs, trajs = self.actor_network(ob, return_dynamics=True, h0=h0_actor) #action_probs: tensor of size (1,1,3)
-
-            else:
-                action_probs, trajs = self.actor_network(ob, return_dynamics=True, h0=h0_actor) #action_probs: tensor of size (1,1,3)
+                
+            action_probs, trajs = self.actor_network(ob, return_dynamics=True, h0=h0_actor) 
             
             p = action_probs[0][0].clone().detach().numpy()
             action = np.random.choice(np.arange(len(p)), p=p) # 0, 1, 2: fix, right, left
@@ -107,7 +105,6 @@ class REINFORCE:
             
             action = torch.Tensor([action])
             trajs_forrelu = self.critic_network.non_linearity(trajs[0][0])
-           # print(torch.unsqueeze(torch.cat((action, trajs_forrelu.detach())),0).size(), "here")
             cose = torch.unsqueeze(torch.unsqueeze(torch.cat((action, trajs_forrelu.detach())),0),0)
             value, trajs_critic = self.critic_network(cose, return_dynamics=True, h0=h0_critic)
             values = torch.cat((values, value[0][0]))  
@@ -131,12 +128,15 @@ class REINFORCE:
    
    
     
-    def learning(self, n_trs, lr): 
+    def learning(self, n_trs, lr_a=1e-4, lr_c=1e-4, name_load=None): 
+        
+        if name_load is not None:
+            self.actor_network.load_state_dict(torch.load(name_load, map_location='cpu'))
         
         begin = time.time()
         
-        optimizer_actor = torch.optim.Adam(self.actor_network.parameters(), lr=lr)
-        optimizer_critic = torch.optim.Adam(self.critic_network.parameters(), lr=lr)
+        optimizer_actor = torch.optim.Adam(self.actor_network.parameters(), lr=lr_a)
+        optimizer_critic = torch.optim.Adam(self.critic_network.parameters(), lr=lr_c)
 
         #with torch.no_grad():        
         
@@ -174,15 +174,28 @@ class REINFORCE:
         loss_mse.backward()
         optimizer_critic.step()
         
-        print("It took %fs for %i trials" %(time.time()-begin, n_trs))
-    
-    
-    
-    def train(self, num_trial, updating_rate, lr):
+        TIME = time.time()-begin
         
-        n_trs = int(num_trial * updating_rate)
-        train_iterations = 1 / updating_rate
-
+        return loss_mse, TIME
+    
+    
+    
+    def training(self, n_trs, iterations, name_load=None, lr_a=1e-4, lr_c=1e-4):
+        
+        if name_load is not None:
+            self.actor_network.load_state_dict(torch.load(name_load, map_location='cpu'))
+    
+        begin = time.time()
+        
+        average_time = 0
+        critic_losses = []
+    
         for i in range(iterations):
-            observations, policies, actions, rewards = self.experience(n_trs, kwarg)
-            learning(self, n_trs, policies, rewards, lr)
+            loss_mse, TIME = self.learning(n_trs, lr_a, lr_c)
+            average_time = average_time + TIME
+            critic_losses.append(loss_mse)
+            
+        print("It took %fs for %i iterations\n" %(time.time()-begin, iterations))
+        print("It took %fs on average for each %i-trails iteration" %(average_time/iterations, n_trs))
+        
+        return critic_losses
