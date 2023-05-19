@@ -9,9 +9,9 @@ import time
 
 class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the parent class
 
-    def __init__(self, input_size, hidden_size, output_size, noise_std, alpha=0.2, rho=1, 
-                 train_wi=False, train_wrec=True, train_wo=False, train_h0=False, 
-                 wi_init=None, wrec_init=None, wo_init=None, si_init=None, so_init=None):
+    def __init__(self, input_size, hidden_size, output_size, noise_std, alpha=0.2, rho=1,
+                 train_wi=False, train_wo=False, train_wrec=True, train_h0=False,
+                 wi_init=None, wo_init=None, wrec_init=None, si_init=None, so_init=None):
         """
         :param input_size: int
         :param hidden_size: int
