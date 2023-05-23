@@ -56,6 +56,7 @@ class RandomDotMotion(ngym.TrialEnv):
         self.observation_space = spaces.Box(-np.inf, np.inf, shape=(1+dim_ring,), dtype=np.float32, name=name)
         name = {'fixation': 0, 'choice': range(1, dim_ring+1)}
         self.action_space = spaces.Discrete(1+dim_ring, name=name)
+        self.stored_coherence = 0
 
     def _new_trial(self, **kwargs):
         """
@@ -76,6 +77,7 @@ class RandomDotMotion(ngym.TrialEnv):
         trial.update(kwargs)
 
         coh = trial['coh']
+        self.stored_coherence = coh
         ground_truth = trial['ground_truth']
         stim_theta = self.theta[ground_truth] # 0 o PI-greco
         
@@ -126,4 +128,4 @@ class RandomDotMotion(ngym.TrialEnv):
                 else:
                     reward += self.rewards['fail']
 
-        return self.ob_now, reward, False, {'new_trial': new_trial, 'gt': gt}
+        return self.ob_now, reward, False, {'new_trial': new_trial, 'gt': gt, 'coh': self.stored_coherence}

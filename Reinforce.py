@@ -69,13 +69,13 @@ class REINFORCE:
         observations = []
         rewards = []
         
-        #probs = torch.unsqueeze(torch.zeros(3), 0)
         log_probs = torch.unsqueeze(torch.zeros(3), 0)
         actions = []
         
         values = torch.zeros(0) 
         
         gt = []
+        coh = []
         errors = []
         
         n_trs = n_trs
@@ -94,13 +94,11 @@ class REINFORCE:
             ob, rwd, done, info = self.task.step(action=action)
             observations.append(ob)
             rewards.append(rwd)
-            #print("ob+rwd", ob, rwd)
             
             ob = torch.Tensor(np.array([ob]))
             ob = torch.unsqueeze(ob, 0) # tensor of size (1,1,3)
                 
             action_probs, trajs = self.actor_network(ob, return_dynamics=True, h0=h0_actor) 
-            #print("\naction_probs+trajs", action_probs, trajs)
             
             p = action_probs[0][0].clone().detach().numpy()
             action = np.random.choice(np.arange(len(p)), p=p) # 0, 1, 2: fix, right, left
@@ -112,7 +110,6 @@ class REINFORCE:
             log_probs = torch.cat((log_probs, torch.unsqueeze(log_action_probs[0][0], 0)))
             
             value, trajs_critic = self.critic_network(in_for_critic, return_dynamics=True, h0=h0_critic)
-            #print("\nvalue+trajs", value, trajs_critic)
             
             values = torch.cat((values, value[0][0]))  
             
@@ -123,9 +120,11 @@ class REINFORCE:
                 trial_index = trial_index + 1
                 trial_begins.append(time_step+1)
                 gt.append(info["gt"])
+                #print(info["gt"])
+                coh.append(info["coh"])
                 errors.append(np.abs(info["gt"]-actions[-2]))
-                #h0_actor = torch.zeros(self.hidden_size)
-                #h0_critic = torch.zeros(self.hidden_size)
+                h0_actor = torch.zeros(self.hidden_size)
+                h0_critic = torch.zeros(self.hidden_size)
 
             time_step = time_step + 1
 
@@ -136,12 +135,12 @@ class REINFORCE:
         actions = np.asarray(actions)
         log_probs = log_probs[1:]
       
-        return observations, rewards, actions, log_probs, values, trial_begins, gt, avarage_error
-        #      array, array, array, tensor(t_steps, actions), tensor(t_steps), list, list, list
+        return observations, rewards, actions, log_probs, values, trial_begins, gt, coh, avarage_error
+        #      array, array, array, tensor(t_steps, actions), tensor(t_steps), list, list, list, list
    
    
     
-    def learning(self, n_trs, lr_a=1e-4, lr_c=1e-4): 
+    def learning(self, n_trs, lr_a=1e-4, lr_c=1e-4, plot=False): 
         
         # TODO
         #if clip_gradient is not None:
@@ -157,7 +156,7 @@ class REINFORCE:
         optimizer_actor.zero_grad()
         optimizer_critic.zero_grad()
         
-        observations, rewards, actions, log_probs, values, trial_begins, gt, avarage_error = self.experience(n_trs)
+        observations, rewards, actions, log_probs, values, trial_begins, gt, coh, avarage_error = self.experience(n_trs)
 
         cum_rho = np.zeros(0)
         tau_r = np.inf  # Song et al. set this value to 10s only for reaction time tasks
@@ -193,28 +192,32 @@ class REINFORCE:
         
         TIME = time.time()-begin
         
-        #obs = observations.T
-        #length = 0
-        #for i in range(n_trs):
-#
-        #    plt.figure(figsize=(25,5))
-#
-        #    start = int(trial_begins[i])
-        #    stop = int(trial_begins[i+1])
-#
-        #    plt.plot(obs[0][start:stop], "-o", label="input_fix", color="gray")
-        #    plt.plot(obs[1][start:stop], "-o", label="input_right", color="black")
-        #    plt.plot(obs[2][start:stop], "-o", label="input_left", color="dimgray")
-        #    plt.plot(actions[start:stop], "-o", label="actions", color="red", alpha=0.5)
-        #    plt.plot(rewards[start:stop], "-o", label="rewards", color="blue", alpha=0.5)
-        #    plt.plot(stop-length-2, gt[i], "*", markersize=25, color="orange")
-        #    length += len(obs[0][start:stop])
-#
-        #    plt.xlabel("t", size=20)
-        #    plt.xticks(size=20)
-        #    plt.yticks(size=20)
-        #    plt.title("trial %i" %(i+1), size=20)
-        #    plt.legend(fontsize=15, loc="upper left");
+        if plot:
+            obs = observations.T
+            length = 0
+            for i in range(n_trs):
+
+                plt.figure(figsize=(25,5))
+
+                start = int(trial_begins[i])
+                stop = int(trial_begins[i+1])
+
+                plt.plot(obs[0][start:stop], "-o", label="input_fix", color="gray")
+                plt.plot(obs[1][start:stop], "-o", label="input_right", color="black")
+                plt.plot(obs[2][start:stop], "-o", label="input_left", color="dimgray")
+                plt.plot(actions[start:stop], "-o", label="actions", color="red", alpha=0.5)
+                plt.plot(rewards[start:stop], "-o", label="rewards", color="blue", alpha=0.5)
+                plt.plot(cum_rho[start:stop], "-o", label="cum_rho", color="cyan", alpha=0.5)
+                plt.plot(values.clone().detach().numpy()[start:stop], "-o", label="values", color="purple", alpha=0.5)
+                plt.plot(stop-length-2, gt[i], "*", markersize=25, color="orange")
+                plt.axhline(0, color="black")
+                length += len(obs[0][start:stop])
+
+                plt.xlabel("t", size=20)
+                plt.xticks(size=20)
+                plt.yticks(size=20)
+                plt.title("trial %i" %(i+1), size=20)
+                plt.legend(fontsize=15, loc="upper left");
         
         return loss, loss_mse, TIME, trial_total_reward, avarage_error
     
@@ -228,16 +231,19 @@ class REINFORCE:
         actor_rewards = []
         critic_losses = []
         errors = []
-    
-        for i in range(iterations):
-            print(i)
-            loss, loss_mse, TIME, trial_total_rewards, avarage_error = self.learning(n_trs, lr_a, lr_c)
+        plot = False
+        
+        for i in range(iterations):            
+            if i == iterations-1:
+                plot = True
+            print("iteration", i+1)    
+            loss, loss_mse, TIME, trial_total_rewards, avarage_error = self.learning(n_trs, lr_a, lr_c, plot)
             average_time = average_time + TIME
             actor_rewards.append(trial_total_rewards.sum()/n_trs)
             critic_losses.append(loss_mse.detach().numpy())
             errors.append(avarage_error)
             
-        print("It took %.2f s for %i iterations\n" %(time.time()-begin, iterations))
+        print("It took %.2f m for %i iterations\n" %((time.time()-begin)/60, iterations))
         print("It took %.2f s on average for each %i-trails iteration\n" %(average_time/iterations, n_trs))
         
         actor_rewards = np.asarray(actor_rewards)

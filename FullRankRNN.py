@@ -51,6 +51,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
             self.si.requires_grad = False 
         if not train_wi:
             self.wi.requires_grad = False
+            self.si.requires_grad = False #attention
             
         self.wrec = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
         if not train_wrec:
@@ -62,6 +63,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
             self.so.requires_grad = False
         if not train_wo:
             self.wo.requires_grad = False
+            self.so.requires_grad = False #attention
             
         self.h0 = nn.Parameter(torch.Tensor(hidden_size)) 
         if not train_h0:
