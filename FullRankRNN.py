@@ -91,6 +91,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
             else:
                 self.so.copy_(so_init)
             self.h0.zero_() #fills self tensor with zeros
+            #self.wi.zero_()
         self.wi_full, self.wo_full = [None] * 2
         self.define_proxy_parameters()
     
@@ -106,6 +107,11 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         
         if actor:
             self.actor = True
+        #else:
+            #self.wi.data = torch.ones(1,1)#, requires_grad=True)
+            #self.wo.data = torch.ones(1,1)#, requires_grad=True)
+        #    self.non_linearity = torch.nn.Tanh()
+
         
         
         
@@ -143,11 +149,21 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
         if self.actor:            
             
             #SOFTMAX
-            exp_output = torch.exp(output.clone())
-            denom = exp_output.clone().sum(dim=-1)
-            soft_output = exp_output.clone()
-            for i in range(self.output_size):
-                 soft_output[:,:,i] = exp_output[:,:,i] / denom
+            soft_output = output.clone()
+            denoms = []
+            for i in range(output.size(2)):
+                new_tensor = output[:, :, :] - output[:, :, i]
+                #rint(new_tensor.clone().detach().numpy())
+                new_tensor = torch.exp(new_tensor)
+                denom = new_tensor.sum(dim=-1)
+                soft_output[:, :, i] = 1 / denom
+                denoms.append(denom.clone().detach().numpy())
+            #rint("softoutpu", soft_output.clone().detach().numpy(), denoms)
+            #p_output = torch.exp(output.clone())
+            #nom = exp_output.clone().sum(dim=-1)
+            #ft_output = exp_output.clone()
+            #r i in range(self.output_size):
+            #   soft_output[:,:,i] = exp_output[:,:,i] / denom
 
             if return_dynamics:
                 return soft_output, trajectories

@@ -122,10 +122,20 @@ class RandomDotMotion(ngym.TrialEnv):
         elif self.in_period('decision'):
             if action != 0:
                 new_trial = True
-                if action == gt:
-                    reward += self.rewards['correct']
-                    self.performance = 1
-                else:
-                    reward += self.rewards['fail']
+                
+                if self.stored_coherence == 0:
+                    pip = np.random.uniform(0,1)
+                    if pip < 0.5:
+                        reward += self.rewards['correct']
+                        self.performance = 1
+                    else:
+                        reward += self.rewards['fail']
+                
+                else: 
+                    if action == gt:
+                        reward += self.rewards['correct']
+                        self.performance = 1
+                    else:
+                        reward += self.rewards['fail']
 
         return self.ob_now, reward, False, {'new_trial': new_trial, 'gt': gt, 'coh': self.stored_coherence}
