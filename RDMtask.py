@@ -36,7 +36,7 @@ class RandomDotMotion(ngym.TrialEnv):
         if rewards:
             self.rewards.update(rewards)
 
-        self.stimuli = np.arange(100, 1600, 100)
+        self.stimuli = np.arange(1500, 1600, 100)#(100, 1600, 100)
         
         self.timing = {
             'fixation': 750,
@@ -123,19 +123,19 @@ class RandomDotMotion(ngym.TrialEnv):
             if action != 0:
                 new_trial = True
                 
-                if self.stored_coherence == 0:
-                    pip = np.random.uniform(0,1)
-                    if pip < 0.5:
-                        reward += self.rewards['correct']
-                        self.performance = 1
-                    else:
-                        reward += self.rewards['fail']
-                
-                else: 
-                    if action == gt:
-                        reward += self.rewards['correct']
-                        self.performance = 1
-                    else:
-                        reward += self.rewards['fail']
+               #if self.stored_coherence == 0:
+               #    pip = np.random.uniform(0,1)
+               #    if pip < 0.5:
+               #        reward += self.rewards['correct']
+               #        self.performance = 1
+               #    else:
+               #        reward += self.rewards['fail']
+               #
+               #else: 
+                if action == gt:
+                    reward += self.rewards['correct']
+                    self.performance = 1
+                else:
+                    reward += self.rewards['fail']
 
         return self.ob_now, reward, False, {'new_trial': new_trial, 'gt': gt, 'coh': self.stored_coherence}

@@ -6,6 +6,13 @@ from math import sqrt, floor
 import random
 import time
 
+#seed = 3
+#random.seed(seed)
+#np.random.seed(seed)
+#torch.manual_seed(seed)
+##torch.backends.cudnn.deterministic = True
+#torch.backends.cudnn.benchmark = False
+#torch.use_deterministic_algorithms(True)
 
 class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the parent class
 
@@ -51,7 +58,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
             self.si.requires_grad = False 
         if not train_wi:
             self.wi.requires_grad = False
-            self.si.requires_grad = False #attention
+            #self.si.requires_grad = False #attention
             
         self.wrec = nn.Parameter(torch.Tensor(hidden_size, hidden_size))
         if not train_wrec:
@@ -63,7 +70,7 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
             self.so.requires_grad = False
         if not train_wo:
             self.wo.requires_grad = False
-            self.so.requires_grad = False #attention
+            #self.so.requires_grad = True #attention
             
         self.h0 = nn.Parameter(torch.Tensor(hidden_size)) 
         if not train_h0:
@@ -153,18 +160,11 @@ class FullRankRNN(nn.Module): # FullRankRNN is a child class, nn.Module is the p
             denoms = []
             for i in range(output.size(2)):
                 new_tensor = output[:, :, :] - output[:, :, i]
-                #rint(new_tensor.clone().detach().numpy())
                 new_tensor = torch.exp(new_tensor)
                 denom = new_tensor.sum(dim=-1)
                 soft_output[:, :, i] = 1 / denom
-                denoms.append(denom.clone().detach().numpy())
-            #rint("softoutpu", soft_output.clone().detach().numpy(), denoms)
-            #p_output = torch.exp(output.clone())
-            #nom = exp_output.clone().sum(dim=-1)
-            #ft_output = exp_output.clone()
-            #r i in range(self.output_size):
-            #   soft_output[:,:,i] = exp_output[:,:,i] / denom
-
+                #denoms.append(denom.clone().detach().numpy())
+           
             if return_dynamics:
                 return soft_output, trajectories
             else:
